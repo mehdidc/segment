@@ -63,7 +63,7 @@ class DetectionDataset:
             w = int(w)
             h = int(h)
             im_mask[class_id, y:y+h, x:x+w] = 1
-            im_mask[0, y:y+h, x:x+w] = 1
+            im_mask[0, y:y+h, x:x+w] = 0
         im = im.transpose((2, 0, 1))
         im = torch.from_numpy(im).float()
         im_mask = torch.from_numpy(im_mask).float()
@@ -83,4 +83,5 @@ def load_image(filename):
     elif len(im.shape) == 1:
         im = im[:, np.newaxis, np.newaxis]
         im = im * np.ones((1, im.shape[0], 3))
+    im = im[:, :, 0:3]
     return im

@@ -26,12 +26,10 @@ filenames, annotations = get_annotations(
     images_folder='alcohol/images/train',
     annotations_file='alcohol/annotations/train.json'
 )
-#filenames = filenames[0:10]
-#annotations = annotations[0:10]
 annotations = [[(box, 'alcohol') for box, class_id in anns] for anns in annotations]
 dataset = DetectionDataset(filenames, annotations)
 image_size = 224
-batch_size = 8 
+batch_size = 4
 nb_epochs = 10000
 
 transform = Compose([
@@ -53,7 +51,7 @@ dataloader = DataLoader(
 model = UNet(3, dataset.nb_classes)
 model.cuda()
 optimizer = Adam(model.parameters(), lr=1e-3)
-nb_iter = 12363
+nb_iter = 0
 
 if os.path.exists('model.th'):
     model = torch.load('model.th')
@@ -67,13 +65,16 @@ for epoch in range(nb_epochs):
         images = images.cuda()
         masks = masks.cuda()
         pred_masks = model(images)
-
+        
+        train = (nb_iter % 10) > 0
+        
         model.zero_grad()
         predv = pred_masks.transpose(1, 3).contiguous().view(-1, dataset.nb_classes)
         _, truev = masks.transpose(1, 3).contiguous().view(-1, dataset.nb_classes).max(dim=1)
         loss = cross_entropy(predv, truev)
-        loss.backward()
-        optimizer.step()
+        if train:
+            loss.backward()
+            optimizer.step()
 
         # eval
         _, pred = pred_masks.max(dim=1)
@@ -81,8 +82,13 @@ for epoch in range(nb_epochs):
         _, true = masks.max(dim=1)
         pixel_acc = (pred == true).float().mean()
 
-        writer.add_scalar('data/loss', loss.item(), nb_iter)
-        writer.add_scalar('data/pixel_acc', pixel_acc.item(), nb_iter)
+        if train:
+            writer.add_scalar('data/loss', loss.item(), nb_iter)
+            writer.add_scalar('data/pixel_acc', pixel_acc.item(), nb_iter)
+        else:
+            writer.add_scalar('data/val_loss', loss.item(), nb_iter)
+            writer.add_scalar('data/val_pixel_acc', pixel_acc.item(), nb_iter)
+
         if nb_iter % 10 == 0:
             idx = np.random.randint(0, len(filenames))
             im = load_image(filenames[idx])
