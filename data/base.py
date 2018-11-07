@@ -51,7 +51,6 @@ class DetectionDataset:
             classes = annotations['category_id']
             boxes = boxes_min_max_to_width_height_format(boxes)
         im_mask = np.zeros((self.nb_classes, im.shape[0], im.shape[1]))
-        im_mask[0] = 1.0
         for box, class_id in zip(boxes, classes):
             x, y, w, h = box
             x *= im.shape[1]
@@ -63,7 +62,7 @@ class DetectionDataset:
             w = int(w)
             h = int(h)
             im_mask[class_id, y:y+h, x:x+w] = 1
-            im_mask[0, y:y+h, x:x+w] = 0
+            im_mask[0, y:y+h, x:x+w] = 1
         im = im.transpose((2, 0, 1))
         im = torch.from_numpy(im).float()
         im_mask = torch.from_numpy(im_mask).float()

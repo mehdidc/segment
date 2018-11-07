@@ -79,6 +79,7 @@ class outconv(nn.Module):
 class UNet(nn.Module):
     def __init__(self, n_channels, n_classes):
         super(UNet, self).__init__()
+        self.nb_classes = n_classes
         self.inc = inconv(n_channels, 64)
         self.down1 = down(64, 128)
         self.down2 = down(128, 256)
