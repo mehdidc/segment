@@ -57,6 +57,8 @@ class DetectionDataset:
             y *= im.shape[0]
             w *= im.shape[1]
             h *= im.shape[0]
+            x = np.clip(x, 0, im.shape[1])
+            y = np.clip(y, 0, im.shape[0])
             x = int(x)
             y = int(y)
             w = int(w)
@@ -84,3 +86,11 @@ def load_image(filename):
         im = im * np.ones((1, im.shape[0], 3))
     im = im[:, :, 0:3]
     return im
+
+def filter_classes(filenames, annotations, classes, remove_empty=True):
+    annotations = [[(box, class_name) for box, class_name in anns if class_name in classes] for anns in annotations]
+    if remove_empty:
+        nbs = list(map(len, annotations))
+        filenames = [f for f, nb in zip(filenames, nbs) if nb > 0]
+        annotations = [a for a, nb in zip(annotations, nbs) if nb > 0]
+    return filenames, annotations

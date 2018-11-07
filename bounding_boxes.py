@@ -28,9 +28,7 @@ def boxes_width_height_to_min_max_format(boxes):
 def boxes_min_max_to_width_height_format(boxes):
     return [(xmin, ymin, xmax - xmin, ymax - ymin) for xmin, ymin, xmax, ymax in boxes]
 
-
-
-def get_bounding_boxes(mask):
+def get_bounding_boxes(mask, heat_map):
     #mask : (h, w, nb_classes)
     h, w, nb_classes = mask.shape
     mask = mask * mask[:, :, 0:1]
@@ -38,7 +36,7 @@ def get_bounding_boxes(mask):
     scores = []
     classes = []
     for class_id in range(1, nb_classes):
-        boxes_, scores_ = get_bounding_boxes_one_class(mask[:, :, class_id])
+        boxes_, scores_ = get_bounding_boxes_one_class(mask[:, :, class_id], heat_map[:, :, class_id])
         boxes.extend(boxes_)
         scores.extend(scores_)
         classes.extend([class_id] * len(boxes_))
@@ -48,7 +46,7 @@ def get_bounding_boxes(mask):
     return boxes, classes, scores
 
 
-def get_bounding_boxes_one_class(mask):
+def get_bounding_boxes_one_class(mask, heat_map):
     # mask : (h, w)
     _, contours, _ = cv2.findContours(
         (mask * 255).astype('uint8'),
@@ -70,7 +68,7 @@ def get_bounding_boxes_one_class(mask):
     scores = []
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
-        score = mask[y:y+h, x:x+w].mean()
+        score = heat_map[y:y+h, x:x+w].mean()
         boxes.append((x, y, w, h))
         scores.append(score)
     return boxes, scores
@@ -150,7 +148,7 @@ def iou(boxes, other_boxes, eps=1e-10):
     return intersection / (union + eps) 
 
 def iou_segmentation(mask, other_mask):
-    inter = ((mask == other_mask) & (mask == 1)).sum(axis=0)
-    union = mask.sum(axis=0) + other_mask.sum(axis=0) - inter
-    return inter / union
+    inter = ((mask == 1) & (other_mask == 1)).astype(int).sum(axis=0)
+    union = mask.astype(int).sum(axis=0) + other_mask.astype(int).sum(axis=0) - inter
+    return inter / (union + 1e-10)
 

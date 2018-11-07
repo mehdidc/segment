@@ -10,8 +10,8 @@ def colored_mask(mask, colors):
     return blend(mask * colors_)
 
 
-def blend(x):
-    result = x.sum(axis=2) / (x>0).sum(axis=2)
+def blend(x, axis=2):
+    result = x.sum(axis=axis) / (x>0).sum(axis=axis)
     result[result==np.nan] = 0
     return result
 
@@ -20,6 +20,6 @@ def draw_boxes(im, boxes, classes, scores, colors, font_scale=2):
     for (x, y, w, h), class_id, score, color in zip(boxes, classes, scores, colors):
         text = '{}({:.2f})'.format(class_id, score)
         color = color.tolist()
-        cv2.rectangle(im, (x, y), (x + w, y + h), color, 1)
+        cv2.rectangle(im, (x, y), (x + w, y + h), color, 2)
         cv2.putText(im, text, (x, y), font, font_scale, color, 2, cv2.LINE_AA)
     return im

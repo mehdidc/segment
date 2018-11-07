@@ -25,21 +25,22 @@ import cv2
 
 from model import UNet
 from bounding_boxes import get_bounding_boxes, nms, match_ordered_boxes
-from viz import draw_boxes
+from viz import draw_boxes, blend
+from data.base import filter_classes
 
 
 def main(
     *, 
     model_filename='model.th',
     images_folder='coco/val2017', 
-    annotations_file='coco/annotations/instances_val2017', 
-    cuda=False
-):
+    annotations_file='coco/annotations/instances_val2017.json', 
+    cuda=False,
+    score_threshold=0.5):
     model_dict = torch.load(
         model_filename, 
         map_location=lambda storage, location:storage)
     model = model_dict['model']
-    transform = model_dict['transform']
+    transform = model_dict['valid_transform']
     if cuda:
         model.cuda()
     model.eval()
@@ -47,6 +48,7 @@ def main(
         images_folder=images_folder,
         annotations_file=annotations_file,
     )
+    filenames, annotations = filter_classes(filenames, annotations, ['person'])
     image_size = 224
     dataset = DetectionDataset(
         filenames, 
@@ -84,44 +86,53 @@ def main(
             pred_gray = (pred_masks[idx]).cpu().numpy()
             pred_gray = pred_gray.transpose((1, 2, 0))
             pred_gray = resize(pred_gray, im.shape[0:2], preserve_range=True)
-            pred_mask = pred_gray > 0.5
+            pred_mask = pred_gray > score_threshold
             pred_mask = pred_mask.astype('uint8')
             
-            true_boxes, true_class_ids, true_scores = get_bounding_boxes(true_mask)
+            true_boxes, true_class_ids, true_scores = get_bounding_boxes(
+                mask=true_mask, heat_map=true_mask)
             true_classes = [dataset.decode_class[class_id] for class_id in true_class_ids]
 
-            pred_boxes, pred_class_ids, pred_scores = get_bounding_boxes(pred_mask)
+            pred_boxes, pred_class_ids, pred_scores = get_bounding_boxes(
+                mask=pred_mask, heat_map=pred_gray)
             inds = nms(pred_boxes, pred_scores, thres=0.3)
             pred_boxes = pred_boxes[inds]
             pred_scores = pred_scores[inds]
             pred_class_ids = pred_class_ids[inds]
-            pred_boxes = pred_boxes[pred_scores>0.5]
-            pred_class_ids = pred_class_ids[pred_scores>0.5]
-            pred_scores = pred_scores[pred_scores>0.5]
             pred_classes = [dataset.decode_class[class_id] for class_id in pred_class_ids]
             pred_class_ids = pred_class_ids.astype(int)
             
-
             for class_id in range(1, model.nb_classes):
                 pred = pred_boxes[pred_class_ids==class_id]
                 true = true_boxes[true_class_ids==class_id]
                 if len(pred) == 0 or len(true) == 0:
                     continue
-                match = match_ordered_boxes(pred, true)
-                true_positives += (match.max(axis=1)==1).sum()
+                match = match_ordered_boxes(pred, true).astype(int)
+                true_positives += match.sum()
             nb_predicted_positives += len(pred_boxes)
             nb_positives += len(true_boxes)
             
-            precision = true_positives / nb_predicted_positives
+            if nb_predicted_positives == 0:
+                precision = 0
+            else:
+                precision = true_positives / nb_predicted_positives
             recall = true_positives / nb_positives
             print('Precision : ', precision)
             print('Recall : ', recall)
             
+            obj = pred_mask[:, :, 0]
+            col = np.array([255, 0, 0]).reshape((1, 1, 3))
+            obj = obj[:, :, np.newaxis] * col
+            im = (im + obj) / (1 + pred_mask[:, :, 0])[:, :, np.newaxis] 
+            im = im.astype('uint8')
+
+
             color = np.array([255, 0, 0]).reshape((1, 3)) * np.ones((len(true_boxes), 1))
             draw_boxes(im, true_boxes, true_classes, true_scores, color)
             draw_boxes(im, pred_boxes, pred_classes, pred_scores, colors[pred_class_ids])
+            
+            
             imsave(os.path.join('eval', os.path.basename(filenames[idx])), im)
-
 
             print(filenames[idx])
 

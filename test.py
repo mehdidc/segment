@@ -35,8 +35,8 @@ def main(
         map_location=lambda storage, location:storage
     )
     model = model_dict['model']
-    transform = model_dict['transform']
-    decode_class = model_dict['decode_class']
+    transform = model_dict['valid_transform']
+    decode_class = model_dict['decode_calss']
     rng = np.random.RandomState(42)
     colors = rng.randint(0, 255, size=(model.nb_classes, 3))
     if cuda:
@@ -56,7 +56,7 @@ def main(
         if cuda:
             im = im.cuda()
         with torch.no_grad():
-            pred_masks = model(im)
+            pred_masks = nn.Sigmoid()(model(im))
         pad = 100
         orig_im = np.pad(orig_im, ((pad, pad), (pad, pad), (0, 0)), mode='constant', constant_values=0)
         pred_gray = (pred_masks[0]).cpu().numpy()
@@ -65,13 +65,21 @@ def main(
         pred_mask = pred_gray > score_threshold
         pred_mask = pred_mask.astype('uint8')
         
-        pred_boxes, pred_class_ids, pred_scores = get_bounding_boxes(pred_mask)
+        pred_boxes, pred_class_ids, pred_scores = get_bounding_boxes(
+                mask=pred_mask, heat_map=pred_gray)
         inds = nms(pred_boxes, pred_scores, thres=0.3)
         pred_boxes = pred_boxes[inds]
         pred_scores = pred_scores[inds]
         pred_class_ids = pred_class_ids[inds]
         pred_classes = [decode_class[class_id] for class_id in pred_class_ids]
         pred_class_ids = pred_class_ids.astype(int)
+
+        obj = pred_mask[:, :, 0]
+        col = np.array([255, 0, 0]).reshape((1, 1, 3))
+        obj = obj[:, :, np.newaxis] * col
+        orig_im = (orig_im + obj) / (1 + pred_mask[:, :, 0])[:, :, np.newaxis] 
+        orig_im = orig_im.astype('uint8')
+
         draw_boxes(orig_im, pred_boxes, pred_classes, pred_scores, colors[pred_class_ids])
             
         out_filename = os.path.join(
